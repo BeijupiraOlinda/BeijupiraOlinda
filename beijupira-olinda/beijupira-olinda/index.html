@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  BEIJUPIRÁ OLINDA — OPERAÇÃO DO SALÃO
+  ============================================================================
+  Aplicação de página única (SPA simples, sem build e sem framework) para o
+  padrão operacional do salão: abertura, briefing, liberação do serviço,
+  limpeza e roteiro de fotos.
+
+  ESTRUTURA DE ARQUIVOS
+  ---------------------
+  index.html                     → esta página (esqueleto + ordem dos scripts)
+  config.js                      → chaves do Supabase (NÃO versionar)
+  config.example.js              → modelo do config.js
+  assets/css/styles.css          → todo o visual
+  assets/js/data.js              → conteúdo dos checklists (textos editáveis)
+  assets/js/state.js             → estado + persistência local (localStorage)
+  assets/js/supabase-sync.js     → sincronização opcional com o Supabase
+  assets/js/ui.js                → renderização das telas
+  assets/js/app.js               → eventos e inicialização
+  supabase/schema.sql            → tabela, índices e políticas RLS
+
+  ORDEM DOS SCRIPTS (importante)
+  ------------------------------
+  config → data → state → supabase-sync → ui → app
+  Cada arquivo publica um objeto em `window`. Nenhum usa `type="module"`,
+  de propósito: assim o app também funciona abrindo o arquivo direto do
+  disco (file://), sem servidor local.
+  ============================================================================
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Padrão operacional do salão do Beijupirá Olinda: abertura, briefing, liberação, limpeza e fotos.">
+<meta name="color-scheme" content="light dark">
+<title>Beijupirá Olinda — Operação do Salão</title>
+
+<!-- Fontes. Se a unidade ficar sem internet, o navegador cai nas fontes do sistema. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<!-- ==========================================================================
+     SPRITES SVG
+     Definições reutilizadas pelos elementos decorativos (<use href="#fish">).
+     ========================================================================== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="fish" viewBox="0 0 80 40">
+    <path d="M6 20C18 4 42 2 56 18L76 4V36L56 22C42 38 18 36 6 20Z" fill="currentColor"/>
+    <circle cx="20" cy="17" r="2.5" fill="#fff"/>
+  </symbol>
+  <symbol id="weed" viewBox="0 0 40 120">
+    <path d="M20 120C6 96 34 84 20 60S34 24 20 0" stroke="currentColor" stroke-width="7" fill="none" stroke-linecap="round"/>
+  </symbol>
+</defs></svg>
+
+<!-- ==========================================================================
+     FUNDO DECORATIVO (peixes, bolhas e algas)
+     Puramente visual: aria-hidden e pointer-events:none. Some na impressão e
+     para quem usa "reduzir movimento" no sistema.
+     ========================================================================== -->
+<div class="sea" aria-hidden="true">
+  <svg class="fish" style="top:20%;width:90px;height:45px;animation:swim 65s linear -15s infinite;--x:15vw"><use href="#fish"/></svg>
+  <svg class="fish" style="top:38%;width:56px;height:28px;animation:swimr 48s linear -30s infinite;--x:70vw"><use href="#fish"/></svg>
+  <svg class="fish" style="top:58%;width:120px;height:60px;animation:swim 90s linear -50s infinite;--x:40vw"><use href="#fish"/></svg>
+  <svg class="fish" style="top:76%;width:70px;height:35px;animation:swimr 70s linear -5s infinite;--x:80vw"><use href="#fish"/></svg>
+  <svg class="fish" style="top:88%;width:44px;height:22px;animation:swim 55s linear -40s infinite;--x:55vw"><use href="#fish"/></svg>
+  <span class="bub" style="left:8%;width:10px;height:10px"></span>
+  <span class="bub" style="left:22%;width:16px;height:16px;animation-delay:-5s;animation-duration:19s"></span>
+  <span class="bub" style="left:41%;width:8px;height:8px;animation-delay:-9s"></span>
+  <span class="bub" style="left:63%;width:14px;height:14px;animation-delay:-2s;animation-duration:17s"></span>
+  <span class="bub" style="left:78%;width:9px;height:9px;animation-delay:-12s"></span>
+  <span class="bub" style="left:92%;width:18px;height:18px;animation-delay:-7s;animation-duration:21s"></span>
+  <svg class="weed" style="left:4px"><use href="#weed"/></svg>
+  <svg class="weed" style="left:34px;height:90px;animation-delay:-2s"><use href="#weed"/></svg>
+  <svg class="weed" style="right:4px;animation-delay:-1s"><use href="#weed"/></svg>
+  <svg class="weed" style="right:34px;height:100px;animation-delay:-3s"><use href="#weed"/></svg>
+</div>
+
+<!-- ==========================================================================
+     CABEÇALHO
+     Os quatro campos de identificação do registro. Unidade + Data + Turno
+     formam a CHAVE do registro no Supabase (ver supabase/schema.sql).
+     ========================================================================== -->
+<header>
+  <div class="wrap">
+    <h1>Beijupirá Olinda</h1>
+    <p>Padrão operacional do salão: abertura, briefing, liberação do serviço e limpeza.</p>
+
+    <div class="meta">
+      <div><label for="f_rest">Restaurante</label><input id="f_rest" data-f="rest" value="Beijupirá" autocomplete="off"></div>
+      <div><label for="f_unit">Unidade</label><input id="f_unit" data-f="unit" value="Olinda" autocomplete="off"></div>
+      <div><label for="f_date">Data</label><input id="f_date" type="date" data-f="date"></div>
+      <div><label for="f_turno">Turno</label><input id="f_turno" data-f="turno" placeholder="Almoço, jantar…" autocomplete="off"></div>
+      <div><label for="f_ger">Gerente</label><input id="f_ger" data-f="ger" autocomplete="off"></div>
+    </div>
+
+    <!-- Status da sincronização. Preenchido por assets/js/supabase-sync.js -->
+    <p class="sync noprint" id="syncStatus" role="status" aria-live="polite">
+      <span class="dot" id="syncDot"></span><span id="syncTxt">Carregando…</span>
+    </p>
+  </div>
+
+  <svg class="hf" style="top:18px;width:64px;height:32px;animation:swim 40s linear -8s infinite;--x:60vw" aria-hidden="true"><use href="#fish"/></svg>
+  <svg class="hf" style="top:70px;width:40px;height:20px;animation:swimr 32s linear -20s infinite;--x:25vw" aria-hidden="true"><use href="#fish"/></svg>
+
+  <svg class="wave" viewBox="0 0 1440 40" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0 22C140 4 260 6 380 20S620 38 760 24 1000 4 1120 16 1340 36 1440 20V40H0Z" style="fill:var(--card);opacity:.45"/>
+    <path d="M0 28C160 12 300 14 440 26S700 40 840 28 1100 12 1240 22 1380 34 1440 28V40H0Z" style="fill:var(--card)"/>
+  </svg>
+</header>
+
+<!-- Abas. O conteúdo é gerado por assets/js/ui.js -->
+<nav><div class="wrap" role="tablist" id="tabs"></div></nav>
+
+<!-- Container das seções. Preenchido por assets/js/ui.js -->
+<main><div class="wrap" id="app"></div></main>
+
+<!-- ==========================================================================
+     SCRIPTS — a ordem importa (ver comentário no topo do arquivo)
+     ========================================================================== -->
+<script src="config.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/state.js"></script>
+<script src="assets/js/supabase-sync.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
